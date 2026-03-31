@@ -12,7 +12,7 @@ import {
   CreateOrderData 
 } from '../types';
 
-const API_BASE_URL = "http://app-backend-group2-aec2d0c7htfccrdp.westus2-01.azurewebsites.net/"
+const API_BASE_URL = "https://app-backend-group2-aec2d0c7htfccrdp.westus2-01.azurewebsites.net/"
 
 // Create axios instance
 const api = axios.create({
