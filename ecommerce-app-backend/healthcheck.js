@@ -2,7 +2,7 @@ const http = require('http');
 
 const options = {
   host: 'localhost',
-  port: 3001,
+  port: process.env.PORT || 3001,
   path: '/health',
   timeout: 2000
 };

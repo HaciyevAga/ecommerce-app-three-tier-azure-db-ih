@@ -21,17 +21,28 @@ jobs:
         with:
           node-version: '20.x'
 
-      - name: npm install and build
+      - name: Install all dependencies and build
         run: |
           npm install --legacy-peer-deps --no-audit
           npm run build --if-present
+        working-directory: ecommerce-app-backend
+
+      - name: Install production dependencies only
+        run: |
+          rm -rf node_modules
+          npm install --only=production --legacy-peer-deps --no-audit
         working-directory: ecommerce-app-backend
 
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
         with:
           name: node-app
-          path: ecommerce-app-backend
+          path: |
+            ecommerce-app-backend/dist
+            ecommerce-app-backend/node_modules
+            ecommerce-app-backend/package.json
+            ecommerce-app-backend/package-lock.json
+            ecommerce-app-backend/healthcheck.js
 
   deploy:
     runs-on: ubuntu-latest

@@ -112,6 +112,7 @@ export default class DatabaseInitializer {
           userId INT NOT NULL,
           totalAmount DECIMAL(10,2) NOT NULL,
           status NVARCHAR(50) DEFAULT 'pending',
+          paymentStatus NVARCHAR(50) DEFAULT 'pending',
           shippingAddress NVARCHAR(500) NOT NULL,
           billingAddress NVARCHAR(500) NOT NULL,
           paymentMethod NVARCHAR(100) NOT NULL,

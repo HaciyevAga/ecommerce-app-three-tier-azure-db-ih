@@ -1,20 +1,33 @@
-# Use Node.js 18 Alpine as base image
-FROM node:18-alpine
+# Stage 1: Build
+FROM node:18-alpine AS builder
 
-# Set working directory
 WORKDIR /app
 
-# Copy package files
 COPY package*.json ./
 
-# Install dependencies
-RUN npm ci --only=production
+# Install ALL dependencies (including devDeps for TypeScript)
+RUN npm ci
 
-# Copy source code
 COPY . .
 
-# Build the application
+# Compile TypeScript to dist/
 RUN npm run build
+
+# Stage 2: Production
+FROM node:18-alpine AS production
+
+WORKDIR /app
+
+COPY package*.json ./
+
+# Install production dependencies only
+RUN npm ci --only=production
+
+# Copy compiled output from builder
+COPY --from=builder /app/dist ./dist
+
+# Copy healthcheck script
+COPY healthcheck.js ./
 
 # Expose port
 EXPOSE 3001
