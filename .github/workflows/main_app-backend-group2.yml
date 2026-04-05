@@ -1,6 +1,4 @@
-# Docs for the Azure Web Apps Deploy action: https://github.com/Azure/webapps-deploy
-# More GitHub Actions for Azure: https://github.com/Azure/actions
-name: Build and deploy Node.js app to Azure Web App - app-backend-group2
+name: Build and deploy Backend to Azure Container App
 
 on:
   push:
@@ -9,67 +7,36 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  build-and-deploy:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Node.js version
-        uses: actions/setup-node@v3
-        with:
-          node-version: '20.x'
-
-      - name: Install all dependencies and build
-        run: |
-          npm install --legacy-peer-deps --no-audit
-          npm run build --if-present
-        working-directory: ecommerce-app-backend
-
-      - name: Install production dependencies only
-        run: |
-          rm -rf node_modules
-          npm install --only=production --legacy-peer-deps --no-audit
-        working-directory: ecommerce-app-backend
-
-      - name: Upload artifact for deployment job
-        uses: actions/upload-artifact@v4
-        with:
-          name: node-app
-          path: |
-            ecommerce-app-backend/dist
-            ecommerce-app-backend/node_modules
-            ecommerce-app-backend/package.json
-            ecommerce-app-backend/package-lock.json
-            ecommerce-app-backend/healthcheck.js
-
-  deploy:
-    runs-on: ubuntu-latest
-    needs: build
     permissions:
       id-token: write
       contents: read
+
     steps:
-      - name: Download artifact from build job
-        uses: actions/download-artifact@v4
-        with:
-          name: node-app
+      - name: Checkout code
+        uses: actions/checkout@v4
 
       - name: Login to Azure
         uses: azure/login@v2
         with:
-          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_A711028FE69446E29F0C1B54B0E4A69F }}
-          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_CA1B97D8A50A4B339A846930E38CBBAE }}
-          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_DA939BF546A846DA87238FA577A05C99 }}
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Zip the app
-        run: zip -r app.zip .
+      - name: Login to Azure Container Registry
+        run: az acr login --name group1m
 
-      - name: Deploy via Azure CLI
+      - name: Build and push Backend image
         run: |
-          az webapp deploy \
-            --resource-group rg-3tier-group-2 \
-            --name app-backend-group2 \
-            --src-path app.zip \
-            --type zip
+          docker build --platform linux/amd64 \
+            -t group1m.azurecr.io/backend-appp:latest \
+            ./ecommerce-app-backend
+          docker push group1m.azurecr.io/backend-appp:latest
+
+      - name: Deploy to Container App
+        run: |
+          az containerapp update \
+            --name backend-appp \
+            --resource-group rg-ecommerce-3tier-group1 \
+            --image group1m.azurecr.io/backend-appp:latest
