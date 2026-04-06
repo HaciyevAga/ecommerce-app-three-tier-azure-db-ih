@@ -62,18 +62,18 @@ class Database {
     return this.pool;
   }
 
-  public async executeQuery(query: string, params?: any[]): Promise<sql.IResult<any>> {
-    const pool = this.getPool();
-    const request = pool.request();
-    
-    if (params) {
-      params.forEach((param, index) => {
-        request.input(`param${index}`, param);
-      });
-    }
-    
-    return await request.query(query);
+public async executeQuery(query: string, params?: Record<string, any>): Promise<sql.IResult<any>> {
+  const pool = this.getPool();
+  const request = pool.request();
+       
+  if (params) {
+    Object.keys(params).forEach(key => {
+      request.input(key, params[key]);
+    });
   }
+       
+  return await request.query(query);
+}
 
   public async executeStoredProcedure(procedureName: string, params?: any): Promise<sql.IResult<any>> {
     const pool = this.getPool();

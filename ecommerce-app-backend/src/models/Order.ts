@@ -52,14 +52,12 @@ export class OrderModel {
 
   async createOrder(orderData: CreateOrderData): Promise<Order> {
     const transaction = this.db.getPool().transaction();
-    
+
     try {
       await transaction.begin();
 
-      // Calculate total amount
       const totalAmount = orderData.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
 
-      // Create order
       const orderQuery = `
         INSERT INTO Orders (userId, status, totalAmount, shippingAddress, billingAddress, paymentMethod, paymentStatus, createdAt, updatedAt)
         OUTPUT INSERTED.*
@@ -78,19 +76,17 @@ export class OrderModel {
       const orderResult = await orderRequest.query(orderQuery);
       const order = orderResult.recordset[0];
 
-      // Create order items
       for (const item of orderData.items) {
-        const itemQuery = `
-          INSERT INTO OrderItems (orderId, productId, quantity, price, productName, productImageUrl)
-          VALUES (@orderId, @productId, @quantity, @price, @productName, @productImageUrl)
-        `;
-
-        // Get product details
         const productQuery = 'SELECT name, imageUrl FROM Products WHERE id = @productId';
         const productRequest = transaction.request();
         productRequest.input('productId', item.productId);
         const productResult = await productRequest.query(productQuery);
         const product = productResult.recordset[0];
+
+        const itemQuery = `
+          INSERT INTO OrderItems (orderId, productId, quantity, price, productName, productImageUrl)
+          VALUES (@orderId, @productId, @quantity, @price, @productName, @productImageUrl)
+        `;
 
         const itemRequest = transaction.request();
         itemRequest.input('orderId', order.id);
@@ -99,10 +95,8 @@ export class OrderModel {
         itemRequest.input('price', item.price);
         itemRequest.input('productName', product.name);
         itemRequest.input('productImageUrl', product.imageUrl);
-
         await itemRequest.query(itemQuery);
 
-        // Update product stock
         const stockQuery = 'UPDATE Products SET stock = stock - @quantity WHERE id = @productId';
         const stockRequest = transaction.request();
         stockRequest.input('quantity', item.quantity);
@@ -112,7 +106,6 @@ export class OrderModel {
 
       await transaction.commit();
 
-      // Get the complete order with items
       const completeOrder = await this.getOrderById(order.id);
       if (!completeOrder) {
         throw new Error('Failed to retrieve created order');
@@ -126,8 +119,8 @@ export class OrderModel {
 
   async getOrderById(id: number): Promise<Order | null> {
     const orderQuery = 'SELECT * FROM Orders WHERE id = @id';
-    const orderResult = await this.db.executeQuery(orderQuery, [id]);
-    
+    const orderResult = await this.db.executeQuery(orderQuery, { id });
+
     if (!orderResult.recordset[0]) {
       return null;
     }
@@ -135,7 +128,7 @@ export class OrderModel {
     const order = orderResult.recordset[0];
 
     const itemsQuery = 'SELECT * FROM OrderItems WHERE orderId = @orderId';
-    const itemsResult = await this.db.executeQuery(itemsQuery, [id]);
+    const itemsResult = await this.db.executeQuery(itemsQuery, { orderId: id });
 
     return {
       ...order,
@@ -146,27 +139,24 @@ export class OrderModel {
   async getOrdersByUserId(userId: number, page: number = 1, limit: number = 10): Promise<{ orders: Order[]; total: number }> {
     const offset = (page - 1) * limit;
 
-    // Get total count
     const countQuery = 'SELECT COUNT(*) as total FROM Orders WHERE userId = @userId';
-    const countResult = await this.db.executeQuery(countQuery, [userId]);
+    const countResult = await this.db.executeQuery(countQuery, { userId });
     const total = countResult.recordset[0].total;
 
-    // Get orders
     const ordersQuery = `
-      SELECT * FROM Orders 
+      SELECT * FROM Orders
       WHERE userId = @userId
       ORDER BY createdAt DESC
       OFFSET @offset ROWS
       FETCH NEXT @limit ROWS ONLY
     `;
-    const ordersResult = await this.db.executeQuery(ordersQuery, [userId, offset, limit]);
+    const ordersResult = await this.db.executeQuery(ordersQuery, { userId, offset, limit });
 
-    // Get items for each order
     const orders: Order[] = [];
     for (const order of ordersResult.recordset) {
       const itemsQuery = 'SELECT * FROM OrderItems WHERE orderId = @orderId';
-      const itemsResult = await this.db.executeQuery(itemsQuery, [order.id]);
-      
+      const itemsResult = await this.db.executeQuery(itemsQuery, { orderId: order.id });
+
       orders.push({
         ...order,
         items: itemsResult.recordset
@@ -179,26 +169,23 @@ export class OrderModel {
   async getAllOrders(page: number = 1, limit: number = 10): Promise<{ orders: Order[]; total: number }> {
     const offset = (page - 1) * limit;
 
-    // Get total count
     const countQuery = 'SELECT COUNT(*) as total FROM Orders';
     const countResult = await this.db.executeQuery(countQuery);
     const total = countResult.recordset[0].total;
 
-    // Get orders
     const ordersQuery = `
-      SELECT * FROM Orders 
+      SELECT * FROM Orders
       ORDER BY createdAt DESC
       OFFSET @offset ROWS
       FETCH NEXT @limit ROWS ONLY
     `;
-    const ordersResult = await this.db.executeQuery(ordersQuery, [offset, limit]);
+    const ordersResult = await this.db.executeQuery(ordersQuery, { offset, limit });
 
-    // Get items for each order
     const orders: Order[] = [];
     for (const order of ordersResult.recordset) {
       const itemsQuery = 'SELECT * FROM OrderItems WHERE orderId = @orderId';
-      const itemsResult = await this.db.executeQuery(itemsQuery, [order.id]);
-      
+      const itemsResult = await this.db.executeQuery(itemsQuery, { orderId: order.id });
+
       orders.push({
         ...order,
         items: itemsResult.recordset
@@ -209,15 +196,13 @@ export class OrderModel {
   }
 
   async updateOrder(id: number, updateData: UpdateOrderData): Promise<Order | null> {
-    const fields = [];
-    const values = [];
-    let paramIndex = 0;
+    const fields: string[] = [];
+    const params: Record<string, any> = {};
 
     Object.keys(updateData).forEach(key => {
       if (updateData[key as keyof UpdateOrderData] !== undefined) {
-        fields.push(`${key} = @param${paramIndex}`);
-        values.push(updateData[key as keyof UpdateOrderData]);
-        paramIndex++;
+        fields.push(`${key} = @${key}`);
+        params[key] = updateData[key as keyof UpdateOrderData];
       }
     });
 
@@ -225,33 +210,30 @@ export class OrderModel {
       return this.getOrderById(id);
     }
 
-    fields.push('updatedAt = GETDATE()');
-    values.push(id);
+    params['id'] = id;
 
     const query = `
-      UPDATE Orders 
-      SET ${fields.join(', ')}
+      UPDATE Orders
+      SET ${fields.join(', ')}, updatedAt = GETDATE()
       OUTPUT INSERTED.*
-      WHERE id = @param${paramIndex}
+      WHERE id = @id
     `;
 
-    const result = await this.db.executeQuery(query, values);
+    const result = await this.db.executeQuery(query, params);
     return result.recordset[0] ? await this.getOrderById(id) : null;
   }
 
   async deleteOrder(id: number): Promise<boolean> {
     const transaction = this.db.getPool().transaction();
-    
+
     try {
       await transaction.begin();
 
-      // Delete order items first
       const deleteItemsQuery = 'DELETE FROM OrderItems WHERE orderId = @orderId';
       const deleteItemsRequest = transaction.request();
       deleteItemsRequest.input('orderId', id);
       await deleteItemsRequest.query(deleteItemsQuery);
 
-      // Delete order
       const deleteOrderQuery = 'DELETE FROM Orders WHERE id = @id';
       const deleteOrderRequest = transaction.request();
       deleteOrderRequest.input('id', id);
